@@ -129,7 +129,10 @@ primeiro start:
 # Como Executar o Projeto
 
 ## Pré-requisitos
-- JDK 21
+- **JDK 21** — confirme com `java -version`. Se aparecer outra versão
+  (ex.: Java 8), ajuste `JAVA_HOME` e o `PATH` para apontarem para o
+  JDK 21 antes de continuar. O Spring Boot 4 **não compila com versões
+  anteriores ao Java 21**.
 - MySQL 8 rodando local (ou em container)
 - Git
 
@@ -148,8 +151,10 @@ CREATE DATABASE carsearch CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 ## 3. Configurar o arquivo `.env`
 
-Crie um `.env` na raiz do projeto (o `spring-dotenv` já lê
-automaticamente):
+Crie um `.env` na raiz do projeto. O Spring Boot 4 lê o arquivo
+nativamente via `spring.config.import=optional:file:./.env[.properties]`
+(declarado em `application.properties`) — o formato `KEY=VALUE` é
+idêntico ao `.properties`, então não há lib externa envolvida.
 
 ```env
 # Banco
@@ -182,16 +187,32 @@ BOOTSTRAP_ADMIN_PASSWORD=Admin@2026Senha!
 
 ## 4. Executar a aplicação
 
+Linux / macOS:
+
 ```bash
 ./mvnw spring-boot:run
 ```
 
-No primeiro boot o `BootstrapAdminRunner` cria o usuário ADMIN inicial
-e imprime no log:
+Windows (PowerShell ou CMD):
+
+```powershell
+.\mvnw.cmd spring-boot:run
+```
+
+No primeiro boot o **Flyway** aplica as 4 migrations e o
+`BootstrapAdminRunner` cria o usuário ADMIN inicial. Procure no log:
 
 ```
+o.f.core.internal.command.DbMigrate  : Successfully applied 4 migrations to schema `carsearch`
+...
 WARN Bootstrap admin criado com username='admin'. TROQUE A SENHA IMEDIATAMENTE.
+Tomcat started on port 8080 (http)
+Started ChallengeFordApplication in X.XXX seconds
 ```
+
+> Para confirmar que o Flyway rodou, no MySQL:
+> `USE carsearch; SELECT version, description, success FROM flyway_schema_history;`
+> Devem aparecer 4 linhas, todas com `success=1`.
 
 ## 5. Obter um token e testar
 

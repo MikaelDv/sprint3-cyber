@@ -31,12 +31,20 @@ public class SecurityHeadersFilter extends OncePerRequestFilter {
             response.setHeader("Referrer-Policy", "no-referrer");
             response.setHeader("Cache-Control", "no-store");
             response.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
-            response.setHeader("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'");
+            response.setHeader("Content-Security-Policy", buildCsp(request));
             response.setHeader("Permissions-Policy", "geolocation=(), microphone=(), camera=()");
             response.setHeader("Server", "api");
             chain.doFilter(request, response);
         } finally {
             org.slf4j.MDC.remove("requestId");
         }
+    }
+
+    private String buildCsp(HttpServletRequest request) {
+        String path = request.getRequestURI();
+        if (path != null && (path.startsWith("/swagger-ui") || path.startsWith("/v3/api-docs") || path.equals("/swagger-ui.html"))) {
+            return "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'";
+        }
+        return "default-src 'none'; frame-ancestors 'none'";
     }
 }

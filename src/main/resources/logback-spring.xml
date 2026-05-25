@@ -3,7 +3,7 @@
 
     <!-- Padrão JSON sem dependências externas -->
     <property name="JSON_PATTERN"
-              value='{"ts":"%d{yyyy-MM-dd''T''HH:mm:ss.SSSXXX}","level":"%level","logger":"%logger{36}","thread":"%thread","requestId":"%X{requestId:-}","msg":"%replace(%msg){''[\r\n]+'',''_''}"}%n'/>
+              value='{"ts":"%d{yyyy-MM-dd&apos;T&apos;HH:mm:ss.SSSXXX}","level":"%level","logger":"%logger{36}","thread":"%thread","requestId":"%X{requestId:-}","msg":"%replace(%msg){&apos;[\r\n]+&apos;,&apos;_&apos;}"}%n'/>
 
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
