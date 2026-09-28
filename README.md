@@ -287,6 +287,5 @@ classe ou tecnologia interna:
 |------|------|
 | Pietro Vitor Pezzente | RM557283 |
 | Eric Darakjian | RM557082 |
-| Luciano Henrique Meriato Júnior | RM554546 |
 | Kauã Soares Guimarães | RM559044 |
 | Enzo Mikael Sanches | RM558887 |
