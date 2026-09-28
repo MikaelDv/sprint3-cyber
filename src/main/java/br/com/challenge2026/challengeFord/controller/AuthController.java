@@ -43,8 +43,9 @@ public class AuthController {
     @Operation(summary = "Registrar usuário (ADMIN)", description = "Cria conta no sistema")
     @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/registrar")
-    public ResponseEntity<Map<String, Object>> registrar(@RequestBody @Valid RegisterRequestDTO dto) {
-        var u = authService.registrar(dto);
+    public ResponseEntity<Map<String, Object>> registrar(@RequestBody @Valid RegisterRequestDTO dto,
+                                                         HttpServletRequest request) {
+        var u = authService.registrar(dto, request);
         return ResponseEntity.status(201).body(Map.of(
                 "id", u.getId(),
                 "username", u.getUsername(),

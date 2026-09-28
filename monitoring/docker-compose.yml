@@ -1,0 +1,99 @@
+# Stack local de banco + observabilidade do Car Search App (Sprint 3 - DevSecOps)
+#
+#   MySQL 8.4    -> banco da API (localhost:3306)
+#   Prometheus   -> coleta /actuator/prometheus da API (localhost:9090)
+#   Loki + Alloy -> coleta os arquivos ../logs/*.log (localhost:3100)
+#   Grafana      -> dashboards e alertas (http://localhost:3000)
+#
+# A API continua rodando fora do Docker (./mvnw spring-boot:run na raiz do projeto).
+# Senhas abaixo são SOMENTE para ambiente local de demonstração.
+
+name: carsearch
+
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: carsearch-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_local_2026}
+      MYSQL_DATABASE: carsearch
+      # Usuário da aplicação (não usar root na API)
+      MYSQL_USER: ${DB_USER:-carsearch_app}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-app_local_2026}
+      TZ: America/Sao_Paulo
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./mysql/init.sql:/docker-entrypoint-initdb.d/01-grafana-readonly.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "--silent"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    container_name: carsearch-prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=15d
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  loki:
+    image: grafana/loki:3.5.0
+    container_name: carsearch-loki
+    command: ["-config.file=/etc/loki/local-config.yaml"]
+    ports:
+      - "3100:3100"
+    volumes:
+      - loki-data:/loki
+
+  alloy:
+    image: grafana/alloy:v1.10.0
+    container_name: carsearch-alloy
+    command: ["run", "--storage.path=/var/lib/alloy/data", "/etc/alloy/config.alloy"]
+    volumes:
+      - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
+      # Pasta de logs gerada pela API (logback-spring.xml). Crie-a antes de subir: mkdir -p ../logs
+      - ../logs:/var/log/challenge-ford:ro
+      - alloy-data:/var/lib/alloy/data
+    depends_on:
+      - loki
+
+  grafana:
+    image: grafana/grafana:12.1.0
+    container_name: carsearch-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-sprint3}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_DATE_FORMATS_DEFAULT_TIMEZONE: browser
+      GRAFANA_MYSQL_PASSWORD: ${GRAFANA_MYSQL_PASSWORD:-grafana_ro_2026}
+      # Opcional: webhook do Discord para receber os alertas (Figura 6)
+      DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+      - loki
+      - mysql
+
+volumes:
+  mysql-data:
+  prometheus-data:
+  loki-data:
+  alloy-data:
+  grafana-data:

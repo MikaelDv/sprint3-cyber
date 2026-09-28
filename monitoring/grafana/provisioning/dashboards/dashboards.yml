@@ -1,0 +1,10 @@
+apiVersion: 1
+
+providers:
+  - name: car-search-app
+    folder: Car Search App
+    type: file
+    disableDeletion: false
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards

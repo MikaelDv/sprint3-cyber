@@ -1,0 +1,30 @@
+// Lê os logs JSON da API (application.log, audit.log, security.log) e envia ao Loki.
+// Cada linha ganha os labels job, filename, level e logger.
+
+local.file_match "api" {
+  path_targets = [{"__path__" = "/var/log/challenge-ford/*.log", "job" = "challenge-ford"}]
+  sync_period  = "5s"
+}
+
+loki.source.file "api" {
+  targets    = local.file_match.api.targets
+  forward_to = [loki.process.api.receiver]
+}
+
+loki.process "api" {
+  stage.json {
+    expressions = { level = "level", logger = "logger" }
+  }
+
+  stage.labels {
+    values = { level = "", logger = "" }
+  }
+
+  forward_to = [loki.write.local.receiver]
+}
+
+loki.write "local" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}

@@ -6,6 +6,9 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import br.com.challenge2026.challengeFord.util.LogSanitizer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -17,6 +20,8 @@ import java.util.concurrent.ConcurrentMap;
 
 @Component
 public class RateLimitingFilter extends OncePerRequestFilter {
+
+    private static final Logger log = LoggerFactory.getLogger("security");
 
     private final ConcurrentMap<String, Bucket> buckets = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, Bucket> loginBuckets = new ConcurrentHashMap<>();
@@ -76,6 +81,7 @@ public class RateLimitingFilter extends OncePerRequestFilter {
             response.setHeader("X-RateLimit-Remaining", String.valueOf(bucket.getAvailableTokens()));
             chain.doFilter(request, response);
         } else {
+            log.warn("Rate limit excedido ip={} path={}", LogSanitizer.safe(key), LogSanitizer.safe(path));
             response.setStatus(429);
             response.setHeader("Retry-After", String.valueOf(refillSeconds));
             response.setContentType("application/json");

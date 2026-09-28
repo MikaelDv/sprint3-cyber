@@ -30,6 +30,7 @@ import java.util.Set;
 public class AuthService {
 
     private static final Logger log = LoggerFactory.getLogger(AuthService.class);
+    private static final Logger securityLog = LoggerFactory.getLogger("security");
     private static final int MAX_FALHAS = 5;
     private static final int BLOQUEIO_MINUTOS = 15;
 
@@ -59,7 +60,7 @@ public class AuthService {
     }
 
     @Transactional
-    public Usuario registrar(RegisterRequestDTO dto) {
+    public Usuario registrar(RegisterRequestDTO dto, HttpServletRequest request) {
         String emailHash = cipher.sha256Hex(dto.email().toLowerCase());
         if (usuarioRepository.existsByUsername(dto.username())
                 || usuarioRepository.existsByEmailHash(emailHash)) {
@@ -75,10 +76,15 @@ public class AuthService {
                 ? EnumSet.of(Role.USER)
                 : EnumSet.copyOf(dto.roles());
         u.setRoles(roles);
-        return usuarioRepository.save(u);
+        Usuario salvo = usuarioRepository.save(u);
+        auditService.registrar("USUARIO_CRIADO", "SUCESSO", "/auth/registrar",
+                "username=" + LogSanitizer.mask(salvo.getUsername(), 2) + " roles=" + roles, request);
+        return salvo;
     }
 
-    @Transactional
+    // dontRollbackOn: a falha lança IllegalArgumentException depois de gravar o contador de
+    // falhas / a revogação dos tokens; sem isso o rollback desfazia o bloqueio de conta.
+    @Transactional(dontRollbackOn = IllegalArgumentException.class)
     public TokenResponseDTO login(LoginRequestDTO dto, HttpServletRequest request) {
         Usuario usuario = usuarioRepository.findByUsername(dto.username())
                 .orElse(null);
@@ -113,7 +119,7 @@ public class AuthService {
         usuario.setFalhasLogin(falhas);
         if (falhas >= MAX_FALHAS) {
             usuario.setBloqueadoAte(LocalDateTime.now().plusMinutes(BLOQUEIO_MINUTOS));
-            log.warn("Conta bloqueada por {} falhas: user={}", falhas, LogSanitizer.mask(usuario.getUsername(), 2));
+            securityLog.warn("Conta bloqueada por {} falhas: user={}", falhas, LogSanitizer.mask(usuario.getUsername(), 2));
         }
         usuarioRepository.save(usuario);
     }
@@ -130,7 +136,7 @@ public class AuthService {
         return token;
     }
 
-    @Transactional
+    @Transactional(dontRollbackOn = IllegalArgumentException.class)
     public TokenResponseDTO renovar(RefreshRequestDTO dto, HttpServletRequest request) {
         String hash = cipher.sha256Hex(dto.refreshToken());
         RefreshToken rt = refreshRepository.findByTokenHash(hash)

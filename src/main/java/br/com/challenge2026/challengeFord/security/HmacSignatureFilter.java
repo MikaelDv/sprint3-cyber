@@ -8,6 +8,9 @@ import jakarta.servlet.ServletInputStream;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletRequestWrapper;
 import jakarta.servlet.http.HttpServletResponse;
+import br.com.challenge2026.challengeFord.util.LogSanitizer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -21,6 +24,8 @@ import java.util.List;
 
 @Component
 public class HmacSignatureFilter extends OncePerRequestFilter {
+
+    private static final Logger log = LoggerFactory.getLogger("security");
 
     private final HmacSigner signer;
 
@@ -68,7 +73,7 @@ public class HmacSignatureFilter extends OncePerRequestFilter {
         String timestamp = request.getHeader(timestampHeader);
 
         if (signature == null || timestamp == null) {
-            reject(response, "Cabeçalhos de assinatura ausentes");
+            reject(request, response, "Cabeçalhos de assinatura ausentes");
             return;
         }
 
@@ -76,24 +81,26 @@ public class HmacSignatureFilter extends OncePerRequestFilter {
             long ts = Long.parseLong(timestamp);
             long skew = Math.abs(Instant.now().getEpochSecond() - ts);
             if (skew > maxSkewSeconds) {
-                reject(response, "Assinatura expirada");
+                reject(request, response, "Assinatura expirada");
                 return;
             }
         } catch (NumberFormatException e) {
-            reject(response, "Timestamp inválido");
+            reject(request, response, "Timestamp inválido");
             return;
         }
 
         CachedBodyRequest wrapper = new CachedBodyRequest(request);
         String body = new String(wrapper.cachedBody, StandardCharsets.UTF_8);
         if (!signer.verify(signature, timestamp, request.getMethod(), request.getRequestURI(), body)) {
-            reject(response, "Assinatura inválida");
+            reject(request, response, "Assinatura inválida");
             return;
         }
         chain.doFilter(wrapper, response);
     }
 
-    private void reject(HttpServletResponse response, String message) throws IOException {
+    private void reject(HttpServletRequest request, HttpServletResponse response, String message) throws IOException {
+        log.warn("HMAC rejeitado motivo=\"{}\" ip={} path={}", message,
+                LogSanitizer.safe(request.getRemoteAddr()), LogSanitizer.safe(request.getRequestURI()));
         response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
         response.setContentType("application/json");
         response.getWriter().write("{\"erro\":\"" + message + "\",\"status\":400}");

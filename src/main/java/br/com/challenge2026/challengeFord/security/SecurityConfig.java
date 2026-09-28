@@ -5,6 +5,8 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authorization.AuthorizationDecision;
+import org.springframework.security.authorization.AuthorizationManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -14,7 +16,9 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.access.intercept.RequestAuthorizationContext;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.util.matcher.IpAddressMatcher;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -46,6 +50,9 @@ public class SecurityConfig {
 
     @Value("${security.cors.max-age}")
     private long maxAge;
+
+    @Value("${security.metrics.allowed-networks}")
+    private String metricsAllowedNetworks;
 
     public SecurityConfig(JwtAuthenticationFilter jwtFilter,
                           RateLimitingFilter rateLimitingFilter,
@@ -94,6 +101,15 @@ public class SecurityConfig {
                 .toList();
     }
 
+    /** Libera o scrape do Prometheus apenas para loopback e redes internas. */
+    private AuthorizationManager<RequestAuthorizationContext> redeInterna() {
+        List<IpAddressMatcher> redes = parseList(metricsAllowedNetworks).stream()
+                .map(IpAddressMatcher::new)
+                .toList();
+        return (authentication, context) -> new AuthorizationDecision(
+                redes.stream().anyMatch(r -> r.matches(context.getRequest())));
+    }
+
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
@@ -105,6 +121,7 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(HttpMethod.POST, "/auth/login", "/auth/refresh").permitAll()
                 .requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/info").permitAll()
+                .requestMatchers(HttpMethod.GET, "/actuator/prometheus").access(redeInterna())
                 .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
                 .requestMatchers(HttpMethod.POST, "/auth/registrar").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.POST, "/veiculos").hasAnyRole("ADMIN", "ANALISTA")

@@ -1,0 +1,462 @@
+# Regras de alerta provisionadas no Grafana (seção 1.2 do documento da Sprint 3)
+apiVersion: 1
+groups:
+- orgId: 1
+  name: seguranca-e-disponibilidade
+  folder: Car Search App
+  interval: 20s
+  rules:
+  - uid: login-falha
+    title: 'P1 - Força bruta: falhas de login'
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: prometheus
+      relativeTimeRange:
+        from: 300
+        to: 0
+      model:
+        refId: A
+        expr: (sum(audit_events_total{acao="LOGIN",resultado="FALHA"}) - (sum(audit_events_total{acao="LOGIN",resultado="FALHA"} offset 5m) or vector(0))) or vector(0)
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        refId: B
+        type: reduce
+        expression: A
+        reducer: last
+        settings:
+          mode: replaceNN
+          replaceWithValue: 0
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        refId: C
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 4
+    noDataState: OK
+    execErrState: Error
+    for: 0s
+    labels:
+      severidade: P1
+      app: car-search
+    annotations:
+      summary: 5 ou mais falhas de login em 5 minutos
+      runbook: 'Playbook: força bruta / credential stuffing (seção 1.4)'
+    isPaused: false
+  - uid: conta-bloqueada
+    title: P2 - Tentativa de login em conta bloqueada
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: prometheus
+      relativeTimeRange:
+        from: 600
+        to: 0
+      model:
+        refId: A
+        expr: (sum(audit_events_total{acao="LOGIN",resultado="BLOQUEADO"}) - (sum(audit_events_total{acao="LOGIN",resultado="BLOQUEADO"} offset 10m) or vector(0))) or vector(0)
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        refId: B
+        type: reduce
+        expression: A
+        reducer: last
+        settings:
+          mode: replaceNN
+          replaceWithValue: 0
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        refId: C
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0
+    noDataState: OK
+    execErrState: Error
+    for: 0s
+    labels:
+      severidade: P2
+      app: car-search
+    annotations:
+      summary: Houve tentativa de login em conta bloqueada nos últimos 10 minutos
+      runbook: Verificar IPs na tabela audit_log
+    isPaused: false
+  - uid: payload-suspeito
+    title: P2 - Payload suspeito ou brute-force no security.log
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: loki
+      relativeTimeRange:
+        from: 300
+        to: 0
+      model:
+        refId: A
+        expr: sum(count_over_time({job="challenge-ford", filename=~".*security.log"} |~ "payload suspeito|brute-force" [5m])) or vector(0)
+        instant: true
+        range: false
+        queryType: instant
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        refId: B
+        type: reduce
+        expression: A
+        reducer: last
+        settings:
+          mode: replaceNN
+          replaceWithValue: 0
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        refId: C
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0
+    noDataState: OK
+    execErrState: Error
+    for: 0s
+    labels:
+      severidade: P2
+      app: car-search
+    annotations:
+      summary: SuspiciousActivityFilter registrou ataque (SQLi, XSS, traversal ou rajada de 401/403)
+      runbook: 'Playbook: força bruta / análise por requestId'
+    isPaused: false
+  - uid: hmac-rejeitado
+    title: P2 - Falhas de assinatura HMAC
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: loki
+      relativeTimeRange:
+        from: 300
+        to: 0
+      model:
+        refId: A
+        expr: sum(count_over_time({job="challenge-ford", filename=~".*security.log"} |= "HMAC rejeitado" [5m])) or vector(0)
+        instant: true
+        range: false
+        queryType: instant
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        refId: B
+        type: reduce
+        expression: A
+        reducer: last
+        settings:
+          mode: replaceNN
+          replaceWithValue: 0
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        refId: C
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 4
+    noDataState: OK
+    execErrState: Error
+    for: 0s
+    labels:
+      severidade: P2
+      app: car-search
+    annotations:
+      summary: 5 ou mais requisições com HMAC inválido em 5 minutos
+      runbook: Possível adulteração de payload ou replay em /veiculos/consultar
+    isPaused: false
+  - uid: rate-limit
+    title: P3 - Rate limit excedido
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: loki
+      relativeTimeRange:
+        from: 300
+        to: 0
+      model:
+        refId: A
+        expr: sum(count_over_time({job="challenge-ford", filename=~".*security.log"} |= "Rate limit excedido" [5m])) or vector(0)
+        instant: true
+        range: false
+        queryType: instant
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        refId: B
+        type: reduce
+        expression: A
+        reducer: last
+        settings:
+          mode: replaceNN
+          replaceWithValue: 0
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        refId: C
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 10
+    noDataState: OK
+    execErrState: Error
+    for: 0s
+    labels:
+      severidade: P3
+      app: car-search
+    annotations:
+      summary: Mais de 10 respostas 429 em 5 minutos
+      runbook: Rate limit já contendo; observar origem
+    isPaused: false
+  - uid: refresh-reuso
+    title: P2 - Reuso de refresh token
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: prometheus
+      relativeTimeRange:
+        from: 600
+        to: 0
+      model:
+        refId: A
+        expr: (sum(audit_events_total{acao="REFRESH",resultado="FALHA"}) - (sum(audit_events_total{acao="REFRESH",resultado="FALHA"} offset 10m) or vector(0))) or vector(0)
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        refId: B
+        type: reduce
+        expression: A
+        reducer: last
+        settings:
+          mode: replaceNN
+          replaceWithValue: 0
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        refId: C
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0
+    noDataState: OK
+    execErrState: Error
+    for: 0s
+    labels:
+      severidade: P2
+      app: car-search
+    annotations:
+      summary: Refresh token inválido ou reutilizado (possível roubo de sessão)
+      runbook: 'Playbook: roubo ou reuso de refresh token'
+    isPaused: false
+  - uid: admin-criado
+    title: P2 - Usuário ADMIN criado
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: mysql
+      relativeTimeRange:
+        from: 600
+        to: 0
+      model:
+        refId: A
+        format: table
+        rawQuery: true
+        editorMode: code
+        rawSql: SELECT COUNT(*) AS value FROM audit_log WHERE acao = 'USUARIO_CRIADO' AND detalhe LIKE '%ADMIN%' AND ocorrido_em > NOW() - INTERVAL 10 MINUTE
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        refId: B
+        type: reduce
+        expression: A
+        reducer: last
+        settings:
+          mode: replaceNN
+          replaceWithValue: 0
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        refId: C
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0
+    noDataState: OK
+    execErrState: Error
+    for: 0s
+    labels:
+      severidade: P2
+      app: car-search
+    annotations:
+      summary: Nova conta com papel ADMIN nos últimos 10 minutos
+      runbook: 'Playbook: conta ADMIN criada indevidamente'
+    isPaused: false
+  - uid: consulta-massiva
+    title: P1 - Consulta massiva de dados
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: prometheus
+      relativeTimeRange:
+        from: 3600
+        to: 0
+      model:
+        refId: A
+        expr: (sum(audit_events_total{acao="CONSULTA_MASSIVA"}) - (sum(audit_events_total{acao="CONSULTA_MASSIVA"} offset 1h) or vector(0))) or vector(0)
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        refId: B
+        type: reduce
+        expression: A
+        reducer: last
+        settings:
+          mode: replaceNN
+          replaceWithValue: 0
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        refId: C
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 3
+    noDataState: OK
+    execErrState: Error
+    for: 0s
+    labels:
+      severidade: P1
+      app: car-search
+    annotations:
+      summary: Mais de 3 listagens com mais de 200 registros em 1 hora
+      runbook: 'Playbook: exfiltração de dados'
+    isPaused: false
+  - uid: erro-5xx
+    title: P1 - Taxa de erro 5xx acima de 5%
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: prometheus
+      relativeTimeRange:
+        from: 300
+        to: 0
+      model:
+        refId: A
+        expr: (sum(rate(http_server_requests_seconds_count{status=~"5.."}[5m])) or vector(0)) / clamp_min(sum(rate(http_server_requests_seconds_count[5m])), 1e-9) * 100
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        refId: B
+        type: reduce
+        expression: A
+        reducer: last
+        settings:
+          mode: replaceNN
+          replaceWithValue: 0
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        refId: C
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 5
+    noDataState: OK
+    execErrState: Error
+    for: 0s
+    labels:
+      severidade: P1
+      app: car-search
+    annotations:
+      summary: Mais de 5% das requisições com erro 5xx
+      runbook: Verificar deploy recente, banco e Gemini
+    isPaused: false
+  - uid: api-fora
+    title: P1 - API fora do ar
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: prometheus
+      relativeTimeRange:
+        from: 300
+        to: 0
+      model:
+        refId: A
+        expr: 1 - (max(up{job="challenge-ford"}) or vector(0))
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        refId: B
+        type: reduce
+        expression: A
+        reducer: last
+        settings:
+          mode: replaceNN
+          replaceWithValue: 0
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        refId: C
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0
+    noDataState: OK
+    execErrState: Error
+    for: 1m
+    labels:
+      severidade: P1
+      app: car-search
+    annotations:
+      summary: Prometheus não consegue coletar a API há 1 minuto
+      runbook: Verificar processo da API e MySQL
+    isPaused: false

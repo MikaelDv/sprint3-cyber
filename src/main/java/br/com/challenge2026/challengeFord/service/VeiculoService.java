@@ -29,9 +29,12 @@ public class VeiculoService {
     @Autowired
     AuditService auditService;
 
+    // A coleção de especificações é lazy: é copiada dentro da transação para o DTO
+    // (open-in-view=false), senão a serialização falha com LazyInitializationException.
+    @Transactional
     public Page<VeiculoDTO> listarVeiculos(Pageable pageable, HttpServletRequest request) {
         Page<VeiculoDTO> page = repository.findAll(pageable)
-                .map(v -> new VeiculoDTO(v.getMarca(), v.getModelo(), v.getVersao(), v.getEspecificacoesList()));
+                .map(v -> new VeiculoDTO(v.getMarca(), v.getModelo(), v.getVersao(), new ArrayList<>(v.getEspecificacoesList())));
         if (page.getTotalElements() > 200) {
             auditService.registrar("CONSULTA_MASSIVA", "SUCESSO", "/veiculos",
                     "total=" + page.getTotalElements(), request);
@@ -39,6 +42,7 @@ public class VeiculoService {
         return page;
     }
 
+    @Transactional
     public VeiculoDTO buscarVeiculo(String marca, String modelo, String versao) {
         String safeMarca = InputSanitizer.normalize(marca);
         String safeModelo = InputSanitizer.normalize(modelo);
@@ -48,7 +52,7 @@ public class VeiculoService {
         InputSanitizer.rejectIfMalicious("versao", safeVersao);
 
         return repository.findByMarcaAndModeloAndVersao(safeMarca, safeModelo, safeVersao)
-                .map(v -> new VeiculoDTO(v.getMarca(), v.getModelo(), v.getVersao(), v.getEspecificacoesList()))
+                .map(v -> new VeiculoDTO(v.getMarca(), v.getModelo(), v.getVersao(), new ArrayList<>(v.getEspecificacoesList())))
                 .orElseThrow(() -> new EntityNotFoundException("Veículo não encontrado"));
     }
 
@@ -128,6 +132,6 @@ public class VeiculoService {
         Veiculo salvo = repository.save(veiculo);
         auditService.registrar("CONSULTAR_IA", "SUCESSO", "/veiculos/consultar",
                 "id=" + salvo.getId(), request);
-        return salvo.getEspecificacoesList();
+        return new ArrayList<>(salvo.getEspecificacoesList());
     }
 }
